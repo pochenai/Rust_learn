@@ -77,7 +77,14 @@ impl PartialOrd for Tx {
 
 impl Ord for Tx {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.priority.cmp(&other.priority)
+        // Primary key is priority (higher = better for block building), but
+        // we need a tie-breaker so `BTreeSet<Tx>` treats two equally-priced
+        // txs from different senders/nonces as distinct elements. Without
+        // this, inserting both would silently keep only one.
+        self.priority
+            .cmp(&other.priority)
+            .then_with(|| self.id.sender.cmp(&other.id.sender))
+            .then_with(|| self.id.nonce.cmp(&other.id.nonce))
     }
 }
 
