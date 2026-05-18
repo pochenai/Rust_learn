@@ -1,3 +1,0 @@
-[workspace]
-members = [ "async_executor", "design-pattern", "eth", "examples/Threadpool", "leetcode","serde", "tiny-kv-server"]
-exclude = ["pow"]
