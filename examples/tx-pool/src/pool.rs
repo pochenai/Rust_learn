@@ -3,9 +3,9 @@ use crate::types::*;
 use imbl::OrdMap;
 use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
-use std::{collections::hash_map::Entry, collections::BTreeSet, sync::Arc};
-use thiserror::Error;
+use std::{collections::hash_map::Entry, sync::Arc};
 
+#[derive(Clone)]
 pub struct Pool {
     inner: Arc<RwLock<TxPool>>,
 }
@@ -25,18 +25,17 @@ impl Pool {
         let pool = self.inner.read();
         Box::new(pool.best())
     }
+
+    pub fn on_canonical_state_change(&self, s: StateUpdate) {
+        let mut pool = self.inner.write();
+        pool.on_canonical_state_change(s);
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct TxPool {
     pending: OrdMap<TxId, Tx>,
     independent_txs: FxHashMap<SenderId, Tx>,
-}
-
-#[derive(Debug, Error)]
-#[error("[{msg}]")]
-pub struct PoolError {
-    msg: String,
 }
 
 impl TxPool {
@@ -49,6 +48,42 @@ impl TxPool {
         BestTxs {
             all: self.pending.clone(),
             independent_txs: self.independent_txs.values().cloned().collect(),
+        }
+    }
+
+    /// Apply a canonical state diff: drop transactions whose nonce was just
+    /// mined and refresh each affected sender's independent transaction.
+    fn on_canonical_state_change(&mut self, state: StateUpdate) {
+        for acc in state {
+            let sender = acc.address;
+
+            // Collect-then-remove: `OrdMap` iterators borrow the map, so we
+            // can't mutate it during iteration.
+            let stale: Vec<TxId> = self
+                .pending
+                .range(TxId::min_for_sender(sender)..TxId::new(sender, acc.nonce_next))
+                .map(|(id, _)| *id)
+                .collect();
+            for id in stale {
+                self.pending.remove(&id);
+            }
+
+            // Smallest remaining tx for this sender; falls into the next
+            // sender's keys (or off the end) when nothing is left.
+            let next = self
+                .pending
+                .range(TxId::new(sender, acc.nonce_next)..)
+                .next()
+                .filter(|(id, _)| id.sender() == sender)
+                .map(|(_, tx)| tx.clone());
+            match next {
+                Some(tx) => {
+                    self.independent_txs.insert(sender, tx);
+                }
+                None => {
+                    self.independent_txs.remove(&sender);
+                }
+            }
         }
     }
 
