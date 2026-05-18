@@ -5,6 +5,18 @@ use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
 use std::{collections::hash_map::Entry, sync::Arc};
 
+/// Abstraction over a transaction pool.
+///
+/// All methods take `&self` because real pool implementations have to be
+/// usable from many tasks at once — internal synchronization lives behind the
+/// trait. `Clone + Send + 'static` lets `spawn_maintain_tasks` hand a handle
+/// to its background task while the caller keeps another for itself.
+pub trait TransactionPoolTr: Clone + Send + 'static {
+    fn add_tx(&self, tx: Tx);
+    fn best_txs(&self) -> Box<dyn Iterator<Item = Tx>>;
+    fn on_canonical_state_change(&self, state: StateUpdate);
+}
+
 #[derive(Clone)]
 pub struct Pool {
     inner: Arc<RwLock<TxPool>>,
@@ -15,20 +27,22 @@ impl Pool {
         let pool = TxPool::default();
         Self { inner: Arc::new(RwLock::new(pool)) }
     }
+}
 
-    pub fn add_tx(&self, tx: Tx) {
+impl TransactionPoolTr for Pool {
+    fn add_tx(&self, tx: Tx) {
         let mut pool = self.inner.write();
         pool.add_tx(tx);
     }
 
-    pub fn best_txs(&self) -> Box<dyn Iterator<Item = Tx>> {
+    fn best_txs(&self) -> Box<dyn Iterator<Item = Tx>> {
         let pool = self.inner.read();
         Box::new(pool.best())
     }
 
-    pub fn on_canonical_state_change(&self, s: StateUpdate) {
+    fn on_canonical_state_change(&self, state: StateUpdate) {
         let mut pool = self.inner.write();
-        pool.on_canonical_state_change(s);
+        pool.on_canonical_state_change(state);
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    pool::Pool,
+    pool::TransactionPoolTr,
     types::{CanonStateNotification, NodeTypes},
 };
 use tokio::{sync::oneshot, task::JoinHandle};
@@ -11,13 +11,14 @@ use tokio_stream::{Stream, StreamExt};
 /// live for the entire node lifetime: between blocks the chain-events stream
 /// simply parks, and the loop should keep waiting rather than racing to exit
 /// once the first notification has been consumed.
-pub fn spawn_maintain_tasks<Node>(
+pub fn spawn_maintain_tasks<Node, P>(
     node: Node,
-    pool: Pool,
+    pool: P,
     shutdown: oneshot::Receiver<()>,
 ) -> JoinHandle<()>
 where
     Node: NodeTypes,
+    P: TransactionPoolTr,
 {
     // Drop broadcast `Lagged` errors here — the maintenance loop only acts on
     // successfully delivered notifications.
@@ -26,9 +27,10 @@ where
 }
 
 /// Apply canonical state updates to the pool until shutdown is signaled.
-pub async fn maintain_transaction_pool<St>(events: St, pool: Pool, shutdown: oneshot::Receiver<()>)
+pub async fn maintain_transaction_pool<St, P>(events: St, pool: P, shutdown: oneshot::Receiver<()>)
 where
     St: Stream<Item = CanonStateNotification> + Send + 'static,
+    P: TransactionPoolTr,
 {
     tokio::pin!(events, shutdown);
     loop {

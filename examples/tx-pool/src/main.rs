@@ -5,7 +5,7 @@ mod types;
 
 use crate::{
     maintain::spawn_maintain_tasks,
-    pool::Pool,
+    pool::{Pool, TransactionPoolTr},
     types::{CanonStateNotification, ChangedAccount, Node, Tx},
 };
 use std::time::Duration;
