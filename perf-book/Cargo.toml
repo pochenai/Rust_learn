@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 imbl = "7.0.0"
+bumpalo = "3.16"
